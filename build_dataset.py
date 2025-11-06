@@ -42,7 +42,7 @@ def fix_filter_dataset(df: pd.DataFrame):
 
 def create_csv(df: pd.DataFrame):
 
-    df[0:100000].to_csv('final_dataset.csv')
+    df[0:10000].to_csv('final_dataset.csv')
 
 
 

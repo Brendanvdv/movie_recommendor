@@ -60,10 +60,14 @@ def vectorize(movie_data_filtered: list):
     model = SentenceTransformer('all-MiniLM-L6-v2')
 
     for movie in movie_data_filtered:
-        
-     review_embeddings = model.encode(movie['reviews'])
+        # Encode all reviews for this movie
+        review_embeddings = model.encode(movie['reviews'])# Shape: (num_reviews, 384)
 
-    print(review_embeddings)
+
+        #Average to get single movie embedding
+        movie['review_embeddings'] = review_embeddings.mean(axis=0)
+        # print(movie['review_embeddings']) 
+    
 
 
 def main():

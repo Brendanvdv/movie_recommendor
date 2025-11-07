@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from sentence_transformers import SentenceTransformer
+from collections import defaultdict
 
 all_g = [
             'science fiction & fantasy',
@@ -23,7 +24,10 @@ all_g = [
             ]
 
 def get_dataset():
-    final_dataset = pd.read_csv('final_dataset.csv')
+
+    dataset = 'final_dataset.csv'
+
+    final_dataset = pd.read_csv(dataset)
 
     # Get all unique genres from your dataset
     # all_genre_strings = final_dataset['genres'].dropna().unique()
@@ -38,17 +42,11 @@ def get_dataset():
 
     return final_dataset
 
-def encode_genres(movie_genres:list,all_genres:list):
-    return [1 if genre in movie_genres else 0 for genre in all_genres]
-
-
 def group():
 
     final_dataset = get_dataset()
 
     grouped = final_dataset.groupby('rotten_tomatoes_link')
-
-    # print(grouped['movie_title'].first())
     
     movie_data = []
 
@@ -64,8 +62,9 @@ def group():
             'movie_title': first_row['movie_title'],
             'reviews': reviews,  # List of all review texts
             'runtime': first_row['runtime'],
-            'year': int((first_row['original_release_date']).split('-')[0]),
-            'tomatometer': first_row['tomatometer_rating'],
+            'year': int((first_row['original_release_date']).split('-')[0]),#takes only year from date
+            'critic_rating': first_row['tomatometer_rating'],
+            'audience_rating': first_row['audience_rating'],
             'genres': first_row['genres']
         })
 
@@ -82,22 +81,31 @@ def group():
     ]
 
     #check min movie reviews
-    # for movie in movie_data_filtered:
+    # for movie in movie_data_grouped:
     #     num = len(movie['reviews'])
     #     if len(movie['reviews']) < num:
     #         num = len(movie['reviews'])
 
     # print(num)
+    movie_data_grouped = movie_data_filtered
 
-    return movie_data_filtered
+    return movie_data_grouped
 
-def vectorize(movie_data_filtered: list):
+#creates binary vector of genres
+def encode_genres(movie_genres:list,all_genres:list):
+    return [1 if genre in movie_genres else 0 for genre in all_genres]
+
+def vectorize(movie_data_grouped: list):
+
+    min_year = 1914
+    max_year = 2020
+    max_runtime = 266
 
 
     model = SentenceTransformer('all-MiniLM-L6-v2')
 
     #dictionary of each movie 
-    for movie in movie_data_filtered:
+    for movie in movie_data_grouped:
 
         ################
         #encode reviews:
@@ -114,12 +122,21 @@ def vectorize(movie_data_filtered: list):
         #vectorize/norm metadata:
         ########################
 
-        #Tomatometer
-        movie['tomatometer_norm'] = movie['tomatometer']/100
+        #Critic rating
+        movie['critic_rating_norm'] = movie['critic_rating']/100
+
+        #Audience rating
+        movie['audience_rating_norm'] = movie['audience_rating']/100
 
         #Genres
         all_genres = all_g
         movie['genre_vector']= encode_genres(movie['genres'], all_genres)
+
+        #year
+        movie['year_norm'] = (movie['year'] - min_year) / (max_year - min_year)
+
+        #runtime
+        movie['runtime_norm'] = movie['runtime']/max_runtime
 
         ##############
         #Final vector:
@@ -127,25 +144,72 @@ def vectorize(movie_data_filtered: list):
         
         final_vector = np.concatenate([
             np.array(movie['review_embeddings']),
-            np.array([movie['tomatometer_norm']]),
-            np.array(movie['genre_vector'])
+            np.array([movie['critic_rating_norm']]),
+            np.array([movie['audience_rating_norm']]),
+            np.array([ movie['year_norm']]),
+            np.array(movie['genre_vector']),
+            np.array([movie['runtime_norm']])
         ])
+        
+        movie['final_vector'] = final_vector
 
-    print(final_vector)
-    print(movie['tomatometer_norm'])
+    print(movie_data_grouped[0])
+    return movie_data_grouped
 
 
-    # print(movie_data_filtered[0])
+# def minhash(movie_data_grouped:list,num_hash):
+    
+#     minhash_signatures = defaultdict(list)
 
+#     #creates specified number of hash functions
+#     hash_functions = [i for i in range(num_hash)]
 
+#     for movie in movie_data_grouped:
+
+#         for i in hash_functions:
+
+#             # For each movie, compute the minimum hash value for each hash function
+#             mmh3.hash(movie['final_vector'],hash_functions[i])
 
     
+#     return minhash_signatures
+
+def vector_to_simhash(movie_data_grouped:list,bits=64):
+
+    simhash_signatures = defaultdict(list)
+
+    for movie in movie_data_grouped:
+
+        vector = movie['final_vector']
+        simhash_signatures[movie['movie_id']].append(int(''.join('1' if bit > 0 else '0' for bit in vector[:bits]), 2))
+    print(simhash_signatures)
+    return simhash_signatures
+
+def hamming(a, b):
+    return bin(a ^ b).count('1')
+
+def build_lsh(movie_data_grouped:list):
+    pass
+
+
+    # movie_ids = [movie['movie_id'] for movie in movie_data_grouped]
+    # movie_vectors = np.array([movie['final_vector'] for movie in movie_data_grouped])
+    # print(len(movie_vectors[0]))
+
 
 def main():
+
+    print("Loading and processing movie data...")
     
     grouped = group()
 
-    vector = vectorize(grouped)
+    movie_data = vectorize(grouped)
+
+    print("Creating Hashes...")
+
+    vector_to_simhash(movie_data)
+
+    # print(len(movie_data))
 
 if __name__ == "__main__":
     main()

@@ -75,7 +75,7 @@ def group():
     #keep movies above minimum amount of reviews
     min_reviews = 5
 
-    movie_data_filtered = [
+    movie_data_grouped = [
         movie for movie in movie_data
         if len(movie['reviews']) >= min_reviews
     ]
@@ -87,11 +87,11 @@ def group():
     #         num = len(movie['reviews'])
 
     # print(num)
-    movie_data_grouped = movie_data_filtered
+   
 
     return movie_data_grouped
 
-#creates binary vector of genres
+#creates binary vector of genres 
 def encode_genres(movie_genres:list,all_genres:list):
     return [1 if genre in movie_genres else 0 for genre in all_genres]
 
@@ -156,37 +156,34 @@ def vectorize(movie_data_grouped: list):
     print(movie_data_grouped[0])
     return movie_data_grouped
 
-
-# def minhash(movie_data_grouped:list,num_hash):
-    
-#     minhash_signatures = defaultdict(list)
-
-#     #creates specified number of hash functions
-#     hash_functions = [i for i in range(num_hash)]
-
-#     for movie in movie_data_grouped:
-
-#         for i in hash_functions:
-
-#             # For each movie, compute the minimum hash value for each hash function
-#             mmh3.hash(movie['final_vector'],hash_functions[i])
-
-    
-#     return minhash_signatures
-
+#SimHash converts high-dimensional vectors into compact binary fingerprints (e.g., 64-bit integers).
 def vector_to_simhash(movie_data_grouped:list,bits=64):
 
-    simhash_signatures = defaultdict(list)
+    #gets the dimension of final vector
+    dimension = len(movie_data_grouped[0]['final_vector'])
 
+    #creates 64 hyperplanes of dimension size
+    hyperplanes = [np.random.randn(dimension) for _ in range(bits)]
+
+    hash_val = 0
+    simhashes = []
+
+    #Creates simhash of size bits
     for movie in movie_data_grouped:
 
         vector = movie['final_vector']
-        simhash_signatures[movie['movie_id']].append(int(''.join('1' if bit > 0 else '0' for bit in vector[:bits]), 2))
-    print(simhash_signatures)
-    return simhash_signatures
 
-def hamming(a, b):
-    return bin(a ^ b).count('1')
+        for i,hp in enumerate(hyperplanes):
+            if np.dot(vector, hp) > 0:
+                hash_val |= (1 << i)#not sure this how works
+        simhashes.append(hash_val)
+
+
+    return simhashes
+
+#number of differing bits
+def hamming(h1, h2):
+    return bin(h1 ^ h2).count('1')
 
 def build_lsh(movie_data_grouped:list):
     pass

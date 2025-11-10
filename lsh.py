@@ -80,23 +80,28 @@ def group():
 
     return movie_data_grouped
 
-#creates binary vector of genres 
+#creates binary list of genres 
 def encode_genres(movie_genres:list,all_genres:list):
     return [1 if genre in movie_genres else 0 for genre in all_genres]
 
 def vectorize(movie_data_grouped: list):
 
-    vectorized_movie_data =  movie_data_grouped
-
     min_year = 1914
     max_year = 2020
-    max_runtime = 266
+    max_runtime = 266 #fix this
 
+    
+    model = SentenceTransformer('paraphrase-MiniLM-L3-v2')#faster but worse perfomance
+    # model = SentenceTransformer('all-MiniLM-L6-v2')
 
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+    total_movies = len(movie_data_grouped)
 
     #dictionary of each movie 
-    for movie in vectorized_movie_data:
+    for idx, movie in enumerate(movie_data_grouped, start=1):
+
+       
+        # Print progress
+        print(f"Processing movie {idx}/{total_movies} ({idx/total_movies*100:.1f}%) - {movie['movie_title']}")
 
         ################
         #encode reviews:
@@ -144,7 +149,10 @@ def vectorize(movie_data_grouped: list):
         
         movie['final_vector'] = final_vector
 
-    print(vectorized_movie_data[0])
+
+    vectorized_movie_data = movie_data_grouped
+
+    # print(vectorized_movie_data[0])
     return vectorized_movie_data
 
 #SimHash converts high-dimensional vectors into compact binary fingerprints (e.g., 64-bit integers).
@@ -194,7 +202,7 @@ def build_lsh(simhash_signatures: defaultdict, bands = 8, bits =64):
             band_hash = (hash >> i*8) & mask
             table[band_hash].append(movie_id) 
 
-    print(tables[0])
+    # print(tables[0])
     return tables
     
 
@@ -215,36 +223,58 @@ def get_movie_id(movie_data, movie_name):
     
     for movie in movie_data:
         if movie['movie_title'] == movie_name:
-            print(movie['movie_id'])
+            # print(movie['movie_id'])
+            return movie['movie_id']
+   
     
 
-# def build_lsh(simhash_signatures: defaultdict, bands = 8, bits =64):
-
-#     rows = bits // bands
-    
-#     tables = [defaultdict(list) for _ in range(bands)]
-
-#     for movie_id, hashes in simhash_signatures.items():
-#         h = hashes[0]  # each movie has one hash
-#         for i in range(bands):
-#             start = i * rows
-#             # extract bits for this band
-#             band_hash = (h >> start) & ((1 << rows) - 1)
-#             tables[i][band_hash].append(movie_id)
-    
-#     return tables
-
-# def query_lsh(query_hash, tables, bands=8, n_bits=64):
-#     rows = n_bits // bands
-#     candidates = set()
-#     for i in range(bands):
-#         start = i * rows
-#         band_hash = (query_hash >> start) & ((1 << rows) - 1)
-#         candidates.update(tables[i][band_hash])
-#     return candidates
+def query_lsh(query_hash, tables, bands=8, n_bits=64):
+    rows = n_bits // bands
+    candidates = set()
+    for i in range(bands):
+        start = i * rows
+        band_hash = (query_hash >> start) & ((1 << rows) - 1)
+        candidates.update(tables[i][band_hash])
+    return candidates
 
    
+def query_movie(query_movie_name, simhash_signatures,vectorized_movie_data,tables,k=10):
 
+    query_movie_id = get_movie_id(vectorized_movie_data,query_movie_name)
+    print(query_movie_id)
+    query_hash = simhash_signatures[query_movie_id][0]
+
+    # Set up parameters
+    bands = 8
+    bits = 64
+    rows = bits // bands
+    mask = (1 << rows) - 1
+    
+    # Collect candidates from all bands
+    candidates = set()
+    
+    for band_num in range(bands):
+        # Extract query's band signature
+        shift_amount = band_num * rows
+        band_signature = (query_hash >> shift_amount) & mask
+        
+        # Look up candidates in this band
+        movies_in_bucket = tables[band_num].get(band_signature, [])
+        candidates.update(movies_in_bucket)
+    
+    # Remove query movie itself
+    candidates.discard(query_movie_id)
+    
+    # Calculate hamming distance for each candidate
+    similarities = []
+    for candidate_id in candidates:
+        candidate_hash = simhash_signatures[candidate_id][0]
+        distance = hamming(query_hash, candidate_hash)
+        similarities.append((candidate_id, distance))
+    
+    # Sort by distance and return top k
+    similarities.sort(key=lambda x: x[1])
+    return similarities[:k]
 
 def main():
 
@@ -262,13 +292,24 @@ def main():
 
     print("Querying...")
 
-    movie = 'm/10005104-intruder'
-    movie_name = "the intruder (l'intrus)"
-    get_movie_name(vectorized_movie_data, movie)
-    get_movie_id(vectorized_movie_data, movie_name)
+    
 
+    # movie = 'm/10005104-intruder'
+    # get_movie_name(vectorized_movie_data, movie)
 
-    # print(len(movie_data))
+    # movie_name = "the intruder (l'intrus)"
+    # get_movie_id(vectorized_movie_data, movie_name)
+
+    query_movie_name = "g-force"
+
+    # matches = [movie['movie_title'] for movie in vectorized_movie_data if movie['movie_title'].lower() == query_movie_name.lower()]
+    # print("Exact matches for query:", matches)
+
+    results = query_movie(query_movie_name,simhash_signatures,vectorized_movie_data,hash_tables)
+
+    print("Similar movies:")
+    for movie_id, distance in results:
+        print(f"  {movie_id}: distance = {distance}")
 
 if __name__ == "__main__":
     main()

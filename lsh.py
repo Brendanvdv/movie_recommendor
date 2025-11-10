@@ -29,17 +29,6 @@ def get_dataset():
 
     final_dataset = pd.read_csv(dataset)
 
-    # Get all unique genres from your dataset
-    # all_genre_strings = final_dataset['genres'].dropna().unique()
-    # # Example: ["Action, Sci-Fi", "Drama", "Comedy, Romance", ...]
-
-    # # Parse and collect unique genres
-    # unique_genres = set()
-    # for genre_string in all_genre_strings:
-    #     genres = genre_string.split(', ')
-    #     unique_genres.update(genres)
-    # print(unique_genres)
-
     return final_dataset
 
 def group():
@@ -57,6 +46,7 @@ def group():
         # Get metadata (take first row since they're all the same)
         first_row = movie_reviews.iloc[0]
 
+        #append dict of each movie
         movie_data.append({
             'movie_id': movie_id,
             'movie_title': first_row['movie_title'],
@@ -69,8 +59,7 @@ def group():
         })
 
     
-    # print(len(movie_data))
-    # print(movie_data[85]['year'])
+    
 
     #keep movies above minimum amount of reviews
     min_reviews = 5
@@ -97,6 +86,8 @@ def encode_genres(movie_genres:list,all_genres:list):
 
 def vectorize(movie_data_grouped: list):
 
+    vectorized_movie_data =  movie_data_grouped
+
     min_year = 1914
     max_year = 2020
     max_runtime = 266
@@ -105,7 +96,7 @@ def vectorize(movie_data_grouped: list):
     model = SentenceTransformer('all-MiniLM-L6-v2')
 
     #dictionary of each movie 
-    for movie in movie_data_grouped:
+    for movie in vectorized_movie_data:
 
         ################
         #encode reviews:
@@ -153,45 +144,106 @@ def vectorize(movie_data_grouped: list):
         
         movie['final_vector'] = final_vector
 
-    print(movie_data_grouped[0])
-    return movie_data_grouped
+    print(vectorized_movie_data[0])
+    return vectorized_movie_data
 
 #SimHash converts high-dimensional vectors into compact binary fingerprints (e.g., 64-bit integers).
-def vector_to_simhash(movie_data_grouped:list,bits=64):
+def vector_to_simhash(vectorized_movie_data:list,bits=64):
 
     #gets the dimension of final vector
-    dimension = len(movie_data_grouped[0]['final_vector'])
+    dimension = len(vectorized_movie_data[0]['final_vector'])
 
     #creates 64 hyperplanes of dimension size
     hyperplanes = [np.random.randn(dimension) for _ in range(bits)]
 
-    hash_val = 0
-    simhashes = []
+    #default dict so we can store keys for hashes. identify hashes later.
+    simhash_signatures = defaultdict(list)
 
     #Creates simhash of size bits
-    for movie in movie_data_grouped:
+    for movie in vectorized_movie_data:
 
+        hash_val = 0
         vector = movie['final_vector']
 
         for i,hp in enumerate(hyperplanes):
             if np.dot(vector, hp) > 0:
                 hash_val |= (1 << i)#not sure this how works
-        simhashes.append(hash_val)
+        simhash_signatures[movie['movie_id']].append(hash_val)
+
+    # print(simhash_signatures)
+    return simhash_signatures
+
+def build_lsh(simhash_signatures: defaultdict, bands = 8, bits =64):
+
+    #rows = bits per band
+    rows = bits // bands
+    #mask is used to extract bands
+    mask = (1 << rows) -1
+
+    
+    tables = [defaultdict(list) for _ in range(bands)]
+
+    for movie_id in simhash_signatures:
+
+        #hash corresponding to movie id
+        hash = simhash_signatures[movie_id][0]
+
+        # Distribute each movie into LSH hash tables based on its band-specific hash value
+        for i,table in enumerate(tables):
+
+            band_hash = (hash >> i*8) & mask
+            table[band_hash].append(movie_id) 
+
+    print(tables[0])
+    return tables
+    
 
 
-    return simhashes
-
-#number of differing bits
+#number of differing bits between two hashes. Smaller distance = more similar movies.
 def hamming(h1, h2):
     return bin(h1 ^ h2).count('1')
 
-def build_lsh(movie_data_grouped:list):
-    pass
 
 
-    # movie_ids = [movie['movie_id'] for movie in movie_data_grouped]
-    # movie_vectors = np.array([movie['final_vector'] for movie in movie_data_grouped])
-    # print(len(movie_vectors[0]))
+def get_movie_name(movie_data, movie_id):
+    
+    for movie in movie_data:
+        if movie['movie_id'] == movie_id:
+            print(movie['movie_title'])
+
+def get_movie_id(movie_data, movie_name):
+    
+    for movie in movie_data:
+        if movie['movie_title'] == movie_name:
+            print(movie['movie_id'])
+    
+
+# def build_lsh(simhash_signatures: defaultdict, bands = 8, bits =64):
+
+#     rows = bits // bands
+    
+#     tables = [defaultdict(list) for _ in range(bands)]
+
+#     for movie_id, hashes in simhash_signatures.items():
+#         h = hashes[0]  # each movie has one hash
+#         for i in range(bands):
+#             start = i * rows
+#             # extract bits for this band
+#             band_hash = (h >> start) & ((1 << rows) - 1)
+#             tables[i][band_hash].append(movie_id)
+    
+#     return tables
+
+# def query_lsh(query_hash, tables, bands=8, n_bits=64):
+#     rows = n_bits // bands
+#     candidates = set()
+#     for i in range(bands):
+#         start = i * rows
+#         band_hash = (query_hash >> start) & ((1 << rows) - 1)
+#         candidates.update(tables[i][band_hash])
+#     return candidates
+
+   
 
 
 def main():
@@ -200,11 +252,21 @@ def main():
     
     grouped = group()
 
-    movie_data = vectorize(grouped)
+    vectorized_movie_data = vectorize(grouped) #list of dictionaries
 
     print("Creating Hashes...")
 
-    vector_to_simhash(movie_data)
+    simhash_signatures = vector_to_simhash(vectorized_movie_data)
+
+    hash_tables = build_lsh(simhash_signatures)
+
+    print("Querying...")
+
+    movie = 'm/10005104-intruder'
+    movie_name = "the intruder (l'intrus)"
+    get_movie_name(vectorized_movie_data, movie)
+    get_movie_id(vectorized_movie_data, movie_name)
+
 
     # print(len(movie_data))
 

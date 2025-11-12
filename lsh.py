@@ -213,11 +213,6 @@ def build_lsh(simhash_signatures: defaultdict, bands = 8, bits =64): #list[defau
 
     # print(tables[0])
     return tables
-    
-
-
-
-
 
 def get_movie_name(movie_data, movie_id) -> str:
     

@@ -12,6 +12,7 @@ all_g = [
     'faith & spirituality', 'mystery & suspense', 'animation', 'special interest', 'romance'
 ]
 
+all_r = ['pg', 'r', 'nr', 'g', 'pg-13', 'nc17']
 
 
 def get_dataset():
@@ -25,31 +26,34 @@ def get_dataset():
 def group() -> list[dict]:
 
     final_dataset = get_dataset()
+    
 
+    #group movies together
     grouped = final_dataset.groupby('rotten_tomatoes_link')
     
     movie_data = []
 
-    for movie_id, movie_reviews in grouped:
+    for movie_id, movie_columns in grouped:
 
-        reviews = movie_reviews['review_content'].tolist()
+        reviews = movie_columns['review_content'].tolist()
 
         # Get metadata (take first row since they're all the same)
-        first_row = movie_reviews.iloc[0]
+        first_row = movie_columns.iloc[0]
+
+        #average review score
+        mean_review_score = movie_columns['review_score'].mean()
 
         #append dict of each movie
         movie_data.append({
             'movie_id': movie_id,
             'movie_title': first_row['movie_title'],
+            'content_rating': first_row['content_rating'],
+            'genres': first_row['genres'],
+            'year': first_row['original_release_date'],
+            'review_score': mean_review_score,
             'reviews': reviews,  # List of all review texts
-            'runtime': first_row['runtime'],
-            'year': int((first_row['original_release_date']).split('-')[0]),#takes only year from date
-            'critic_rating': first_row['tomatometer_rating'],
-            'audience_rating': first_row['audience_rating'],
-            'genres': first_row['genres']
+            'movie_info': first_row['movie_info'] #List of all review info texts
         })
-
-    
     
 
     #keep movies above minimum amount of reviews
@@ -68,6 +72,7 @@ def group() -> list[dict]:
 
     # print(num)
    
+    
 
     return movie_data_grouped
 
@@ -75,22 +80,25 @@ def group() -> list[dict]:
 def encode_genres(movie_genres:list,all_genres:list):
     return [1 if genre in movie_genres else 0 for genre in all_genres]
 
+#creates binary list of ratings
+def encode_content_rating(content_ratings,all_content_ratings):
+     return [1 if cr in content_ratings else 0 for cr in all_content_ratings]
+
 def vectorize(movie_data_grouped: list) -> list[dict]:
 
-    runtimes = [movie['runtime'] for movie in movie_data_grouped if movie['runtime'] > 0]
     year = [movie['year'] for movie in movie_data_grouped if movie['year'] > 0]
 
     min_year = min(year)
     max_year = max(year)
-    max_runtime = max(runtimes)
+
 
     
-    # model = SentenceTransformer('paraphrase-MiniLM-L3-v2')#faster but worse perfomance
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+    model = SentenceTransformer('paraphrase-MiniLM-L3-v2')#faster but worse perfomance
+    # model = SentenceTransformer('all-MiniLM-L6-v2')
 
     total_movies = len(movie_data_grouped)
 
-    #dictionary of each movie 
+    
     for idx, movie in enumerate(movie_data_grouped, start=1):
 
        
@@ -107,38 +115,42 @@ def vectorize(movie_data_grouped: list) -> list[dict]:
         #Average to get single movie embedding
         movie['review_embeddings'] = review_embeddings.mean(axis=0)
 
+        ###################
+        #encode movie info:
+        ###################
+
+        # Encode all movie infos for this movie
+        movie['movie_info_embeddings'] = model.encode(movie['movie_info'])
 
         ########################
         #vectorize/norm metadata:
         ########################
 
-        #Critic rating
-        movie['critic_rating_norm'] = movie['critic_rating']/100
+        #Content rating
+        all_content_ratings = all_r
+        movie['content_rating_norm'] = encode_content_rating(movie['content_rating'],all_content_ratings)
 
-        #Audience rating
-        movie['audience_rating_norm'] = movie['audience_rating']/100
+        #Review rating
+        movie['review_score_norm'] = movie['review_score']/100
 
         #Genres
         all_genres = all_g
-        movie['genre_vector']= encode_genres(movie['genres'], all_genres)
+        movie['genre_vector'] = encode_genres(movie['genres'], all_genres)
 
-        #year
+        #Year
         movie['year_norm'] = (movie['year'] - min_year) / (max_year - min_year)
-
-        #runtime
-        movie['runtime_norm'] = movie['runtime']/max_runtime
 
         ##############
         #Final vector:
         ##############
-        
+
         final_vector = np.concatenate([
             np.array(movie['review_embeddings']),
-            np.array([movie['critic_rating_norm']]),
-            np.array([movie['audience_rating_norm']]),
-            np.array([ movie['year_norm']]),
+            np.array(movie['movie_info_embeddings']),
+            np.array(movie['content_rating_norm']),
+            np.array([movie['review_score_norm']]),
             np.array(movie['genre_vector']),
-            np.array([movie['runtime_norm']])
+            np.array([ movie['year_norm']])
         ])
         
         movie['final_vector'] = final_vector
@@ -299,6 +311,8 @@ def output_candidates(top_candidates,vectorized_movie_data):
 
 def main():
 
+    
+
    # Load vectorized data from pickle or generate if missing
     vectorized_movie_data = load_or_create_vectorized_data()
 
@@ -311,7 +325,7 @@ def main():
     print("Querying...")
 
     # query_movie_name = "star wars: episode iii - revenge of the sith"
-    query_movie_name = "raiders of the lost ark"
+    query_movie_name = "10"
 
     top_candidates = query_movie(query_movie_name,vectorized_movie_data,simhash_signatures,hash_tables)
 
@@ -345,3 +359,8 @@ if __name__ == "__main__":
 
 #Improve computation time:
 #pickle file
+
+
+#not sure:
+#take average of review?
+#nr(not rated) remove?

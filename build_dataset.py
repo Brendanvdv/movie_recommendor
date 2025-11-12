@@ -15,6 +15,7 @@ def merge_datasets():
 def fix_filter_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     wanted_columns = [
+        'critic_name',
         'rotten_tomatoes_link',
         'movie_title',
         'content_rating',
@@ -72,7 +73,10 @@ def convert_rating(rating):
 
 def create_csv(df: pd.DataFrame):
 
-    # df[0:30000].to_csv('final_dataset.csv')
+
+
+    # df[0:1000].to_csv('final_dataset.csv')#smaller sample
+
     df.to_csv('final_dataset.csv')
 
 

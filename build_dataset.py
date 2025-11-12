@@ -8,7 +8,10 @@ df_movies = pd.read_csv('rotten_tomatoes_movies.csv')
 #combines the two datasets
 def merge_datasets():
 
-    df_merged = pd.merge(df_critic_reviews,df_movies,on='rotten_tomatoes_link', how='inner')
+    #remove duplicate movies
+    removed_duplicate_movies = df_movies.drop_duplicates(subset='movie_title', keep='first')
+
+    df_merged = pd.merge(df_critic_reviews,removed_duplicate_movies,on='rotten_tomatoes_link', how='inner')
     return df_merged
     
 #chooses columns we want and filters out anything we dont want
@@ -75,9 +78,9 @@ def create_csv(df: pd.DataFrame):
 
 
 
-    # df[0:1000].to_csv('final_dataset.csv')#smaller sample
+    df[0:1000].to_csv('final_dataset.csv')#smaller sample
 
-    df.to_csv('final_dataset.csv')
+    # df.to_csv('final_dataset.csv')
 
 
 

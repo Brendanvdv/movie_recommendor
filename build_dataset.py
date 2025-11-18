@@ -2,16 +2,14 @@ import pandas as pd
 import numpy as np
 from typing import cast
 
-df_critic_reviews = pd.read_csv('rotten_tomatoes_critic_reviews.csv')
-df_movies = pd.read_csv('rotten_tomatoes_movies.csv')
-
 #combines the two datasets
-def merge_datasets():
+def merge_datasets(df_movie, df_critic):
 
     #remove duplicate movies
-    removed_duplicate_movies = df_movies.drop_duplicates(subset='movie_title', keep='first')
+    removed_duplicate_movies = df_movie.drop_duplicates(subset='movie_title', keep='first')
 
-    df_merged = pd.merge(df_critic_reviews,removed_duplicate_movies,on='rotten_tomatoes_link', how='inner')
+    df_merged = pd.merge(df_critic,removed_duplicate_movies,on='rotten_tomatoes_link', how='inner')
+
     return df_merged
     
 #chooses columns we want and filters out anything we dont want
@@ -26,6 +24,7 @@ def fix_filter_dataset(df: pd.DataFrame) -> pd.DataFrame:
         'original_release_date',
         'review_score',
         'review_content',
+        'review_type',
         'movie_info'
     ]
 
@@ -75,18 +74,16 @@ def convert_rating(rating):
 
 
 def create_csv(df: pd.DataFrame):
-
-
-
     df[0:1000].to_csv('final_dataset.csv')#smaller sample
 
     # df.to_csv('final_dataset.csv')
 
-
-
 def main():
 
-    create_csv(fix_filter_dataset(merge_datasets()))
+    df_critic_reviews = pd.read_csv('rotten_tomatoes_critic_reviews.csv')
+    df_movies = pd.read_csv('rotten_tomatoes_movies.csv')   
+
+    create_csv(fix_filter_dataset(merge_datasets(df_movies,df_critic_reviews)))
 
 if __name__ == "__main__":
     main()

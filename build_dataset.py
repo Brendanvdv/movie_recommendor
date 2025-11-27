@@ -6,7 +6,7 @@ from typing import cast
 def merge_datasets(df_movie, df_critic):
 
     #remove duplicate movies
-    removed_duplicate_movies = df_movie.drop_duplicates(subset='movie_title', keep='first')
+    removed_duplicate_movies = df_movie.drop_duplicates(subset='rotten_tomatoes_link', keep='first')
 
     df_merged = pd.merge(df_critic,removed_duplicate_movies,on='rotten_tomatoes_link', how='inner')
 
@@ -22,7 +22,6 @@ def fix_filter_dataset(df: pd.DataFrame) -> pd.DataFrame:
         'content_rating',
         'genres',
         'original_release_date',
-        'review_score',
         'review_content',
         'review_type',
         'movie_info'
@@ -41,42 +40,12 @@ def fix_filter_dataset(df: pd.DataFrame) -> pd.DataFrame:
     #only take year from release date
     df_filtered['original_release_date'] = df_filtered['original_release_date'].str.split('-').str[0]
 
-    #convert rating to percentage
-    df_filtered['review_score'] = df_filtered['review_score'].apply(convert_rating)
-
     return df_filtered
 
-def convert_rating(rating):
-    
-    if '/' in rating: 
-        try:
-            numerator, denominator = rating.split('/')
-            numerator = float(numerator)
-            denominator = float(denominator)
-            
-            percentage = round((numerator / denominator) * 100,2)
-
-            return percentage
-
-        except:
-            return None
-        
-    letter_grades = {
-        'a+': 97, 'a': 93, 'a-': 90,
-        'b+': 87, 'b': 83, 'b-': 80,
-        'c+': 77, 'c': 73, 'c-': 70,
-        'd+': 67, 'd': 63, 'd-': 60,
-        'f': 50
-    }
-
-    if rating in letter_grades:
-        return letter_grades[rating]
-
-
 def create_csv(df: pd.DataFrame):
-    df[0:1000].to_csv('final_dataset.csv')#smaller sample
-
-    # df.to_csv('final_dataset.csv')
+    # df[0:10000].to_csv('final_dataset.csv')#smaller sample
+    
+    df.to_csv('final_dataset.csv')
 
 def main():
 
